@@ -37,7 +37,14 @@ options.UseSqlServer(builder.Configuration.GetConnectionString("OrderSystemConne
 
 // Register application services
 builder.Services.AddScoped<IOrderService, OrderService>();
+builder.Services.AddScoped<IProductService, ProductService>();
 builder.Services.AddScoped<ICorrelationIdAccessor, CorrelationIdAccessor>();
+
+builder.Services.AddStackExchangeRedisCache(options =>
+{
+    options.Configuration = "localhost:6379,connectTimeout=10000,syncTimeout=10000";
+    options.InstanceName = "RedisCacheInstance";
+});
 
 // Logging Configuration
 // Remove default logging providers
@@ -52,7 +59,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
-
+app.UseMiddleware<ExceptionHandlingMiddleware>();
 app.UseHttpsRedirection();
 // Attach a Correlation ID to each request for tracing
 app.UseCorrelationId();
