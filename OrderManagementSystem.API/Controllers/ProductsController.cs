@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using OrderManagementSystem.API.DTOs;
 using OrderManagementSystem.API.Services;
 
 namespace OrderManagementSystem.API.Controllers
@@ -6,13 +7,9 @@ namespace OrderManagementSystem.API.Controllers
 
     [ApiController]
     [Route("api/[controller]")]
-    public class ProductsController : ControllerBase
+    public class ProductsController(IProductService productService) : ControllerBase
     {
-        private readonly IProductService _productService;
-        public ProductsController(IProductService productService)
-        {
-            _productService = productService;
-        }
+        private readonly IProductService _productService = productService;
 
         [HttpGet]
         public async Task<IActionResult> GetAllProducts()
@@ -22,7 +19,7 @@ namespace OrderManagementSystem.API.Controllers
         }
 
         [HttpGet("{id:int}")]
-        public async Task<IActionResult> Get(int id)
+        public async Task<IActionResult> Get([FromRoute] int id)
         {
             var product = await _productService.GetProductByIdAsync(id);
             if (product == null)
@@ -32,5 +29,15 @@ namespace OrderManagementSystem.API.Controllers
             return Ok(product);
         }
 
+        [HttpPost]
+        public async Task<IActionResult> CreateProduct([FromBody] CreateProductDTO productDto)
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
+            var createdProduct = await _productService.CreateProductAsync(productDto);
+            return CreatedAtAction(nameof(Get), new { id = createdProduct.Id }, createdProduct);
+        }
     }
 }

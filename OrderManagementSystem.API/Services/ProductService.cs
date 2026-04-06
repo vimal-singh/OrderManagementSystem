@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Distributed;
 using OrderManagementSystem.API.Data;
 using OrderManagementSystem.API.DTOs;
+using OrderManagementSystem.API.Entities;
 
 namespace OrderManagementSystem.API.Services
 {
@@ -10,6 +11,32 @@ namespace OrderManagementSystem.API.Services
     {
         private readonly OrderManagementDbContext _dbContext = dbContext;
         private readonly IDistributedCache _cache = cache;
+
+        public async Task<ProductDTO> CreateProductAsync(CreateProductDTO productDto)
+        {
+            var product = new Product
+            {
+                Name = productDto.Name,
+                Price = productDto.Price,
+                StockQuantity = productDto.StockQuantity,
+                Category = productDto.Category,
+
+            };
+            // invalidate cache for all products
+            await _cache.RemoveAsync("all_products");
+            
+            _dbContext.Products.Add(product);
+            await _dbContext.SaveChangesAsync();
+
+            return new ProductDTO
+            {
+                Id = product.Id,
+                Name = product.Name,
+                Price = product.Price,
+                StockQuantity = product.StockQuantity,
+                Category = product.Category
+            };
+        }
 
         public async Task<ProductDTO?> GetProductByIdAsync(int id)
         {
