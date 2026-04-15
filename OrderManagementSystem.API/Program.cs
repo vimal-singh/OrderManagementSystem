@@ -3,6 +3,7 @@ using OrderManagementSystem.API.Services;
 using OrderManagementSystem.API.Data;
 using Serilog;
 using OrderManagementSystem.API.Middlewares;
+using OrderManagementSystem.API.Repositories;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -38,6 +39,7 @@ options.UseSqlServer(builder.Configuration.GetConnectionString("OrderSystemConne
 // Register application services
 builder.Services.AddScoped<IOrderService, OrderService>();
 builder.Services.AddScoped<IProductService, ProductService>();
+builder.Services.AddScoped<IProductRepository, ProductRepository>();
 builder.Services.AddScoped<ICorrelationIdAccessor, CorrelationIdAccessor>();
 
 builder.Services.AddStackExchangeRedisCache(options =>
@@ -60,9 +62,10 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 app.UseMiddleware<ExceptionHandlingMiddleware>();
+app.UseCorrelationId();
 app.UseHttpsRedirection();
 // Attach a Correlation ID to each request for tracing
-app.UseCorrelationId();
+
 
 app.MapControllers();
 app.Run();

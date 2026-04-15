@@ -4,12 +4,13 @@ using Microsoft.Extensions.Caching.Distributed;
 using OrderManagementSystem.API.Data;
 using OrderManagementSystem.API.DTOs;
 using OrderManagementSystem.API.Entities;
+using OrderManagementSystem.API.Repositories;
 
 namespace OrderManagementSystem.API.Services
 {
-    public class ProductService(OrderManagementDbContext dbContext, IDistributedCache cache) : IProductService
+    public class ProductService(IProductRepository repository, IDistributedCache cache) : IProductService
     {
-        private readonly OrderManagementDbContext _dbContext = dbContext;
+        private readonly IProductRepository _repository = repository;
         private readonly IDistributedCache _cache = cache;
 
         public async Task<ProductDTO> CreateProductAsync(CreateProductDTO productDto)
@@ -25,8 +26,7 @@ namespace OrderManagementSystem.API.Services
             // invalidate cache for all products
             await _cache.RemoveAsync("all_products");
             
-            _dbContext.Products.Add(product);
-            await _dbContext.SaveChangesAsync();
+            await _repository.AddProductAsync(product);
 
             return new ProductDTO
             {
@@ -58,9 +58,7 @@ namespace OrderManagementSystem.API.Services
             }
 
             // Fetch from DB
-            var dbProduct = await _dbContext.Products
-                .AsNoTracking()
-                .FirstOrDefaultAsync(p => p.Id == id);
+            var dbProduct = await _repository.GetByIdAsync(id);
 
             if (dbProduct == null)
             {
@@ -108,16 +106,15 @@ namespace OrderManagementSystem.API.Services
                 return JsonSerializer.Deserialize<List<ProductDTO>>(cachedProducts)
                        ?? new List<ProductDTO>();
             }
-            var products = await _dbContext.Products
-                .AsNoTracking()
-                .Select(p => new ProductDTO
-                {
-                    Id = p.Id,
-                    Name = p.Name,
-                    Price = p.Price
-                })
-                .ToListAsync();
-
+            
+            var dbProducts = await _repository.GetAllProductsAsync();
+            var products = dbProducts.Select(p => new ProductDTO
+            {
+                Id = p.Id,
+                Name = p.Name,
+                Price = p.Price
+            }).ToList();
+            
             // Cache result (even if empty)
             var cacheOptions = new DistributedCacheEntryOptions
             {

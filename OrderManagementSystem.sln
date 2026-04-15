@@ -6,6 +6,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OrderManagementSystem.API",
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OrderManagementSystem.Auth", "OrderManagementSystem.Auth\OrderManagementSystem.Auth.csproj", "{623AB58D-6BB5-4186-AC54-79FC6D874057}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OrderManagementSystem.Tests", "OrderManagementSystem.Tests\OrderManagementSystem.Tests.csproj", "{80B04E81-6549-4E00-B730-78B69CA7C883}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -20,6 +22,10 @@ Global
 		{623AB58D-6BB5-4186-AC54-79FC6D874057}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{623AB58D-6BB5-4186-AC54-79FC6D874057}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{623AB58D-6BB5-4186-AC54-79FC6D874057}.Release|Any CPU.Build.0 = Release|Any CPU
+		{80B04E81-6549-4E00-B730-78B69CA7C883}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{80B04E81-6549-4E00-B730-78B69CA7C883}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{80B04E81-6549-4E00-B730-78B69CA7C883}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{80B04E81-6549-4E00-B730-78B69CA7C883}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
