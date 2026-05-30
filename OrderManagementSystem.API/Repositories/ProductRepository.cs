@@ -33,7 +33,7 @@ namespace OrderManagementSystem.API.Repositories
 
         public async Task<Product> DeleteProductAsync(int id)
         {
-            var product = await GetByIdAsync(id);
+            var product = await _dbContext.Products.FirstOrDefaultAsync(p => p.Id == id);
             if (product == null)
             {
                 throw new InvalidOperationException("Product not found");
@@ -46,7 +46,8 @@ namespace OrderManagementSystem.API.Repositories
 
         public async Task<Product> UpdateProductAsync(Product product)
         {
-            var existingProduct = await GetByIdAsync(product.Id) ?? throw new InvalidOperationException("Product not found");
+            var existingProduct = await _dbContext.Products.FirstOrDefaultAsync(p => p.Id == product.Id) 
+                ?? throw new InvalidOperationException("Product not found");
             _dbContext.Entry(existingProduct).CurrentValues.SetValues(product);
             await _dbContext.SaveChangesAsync();
             return existingProduct;

@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json;
+using Microsoft.Extensions.Hosting;
 
 namespace OrderManagementSystem.API.Middlewares
 {
@@ -7,11 +8,13 @@ namespace OrderManagementSystem.API.Middlewares
     {
         private readonly RequestDelegate _next;
         private readonly ILogger<ExceptionHandlingMiddleware> _logger;
+        private readonly IHostEnvironment _env;
 
-        public ExceptionHandlingMiddleware(RequestDelegate next, ILogger<ExceptionHandlingMiddleware> logger)
+        public ExceptionHandlingMiddleware(RequestDelegate next, ILogger<ExceptionHandlingMiddleware> logger, IHostEnvironment env)
         {
             _next = next;
             _logger = logger;
+            _env = env;
         }
 
         public async Task InvokeAsync(HttpContext context)
@@ -24,15 +27,26 @@ namespace OrderManagementSystem.API.Middlewares
             {
                 _logger.LogError(ex, "Unhandled exception occurred");
 
-                context.Response.StatusCode = 500;
+                context.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
                 context.Response.ContentType = "application/json";
 
-                var response = new
+                object response;
+                if (_env.IsDevelopment())
                 {
-                    message = ex.Message,
-                    innerException = ex.InnerException?.Message,
-                    stackTrace = ex.StackTrace // TEMP (remove later)
-                };
+                    response = new
+                    {
+                        message = ex.Message,
+                        innerException = ex.InnerException?.Message,
+                        stackTrace = ex.StackTrace
+                    };
+                }
+                else
+                {
+                    response = new
+                    {
+                        message = "An unexpected error occurred. Please try again later."
+                    };
+                }
 
                 await context.Response.WriteAsJsonAsync(response);
             }

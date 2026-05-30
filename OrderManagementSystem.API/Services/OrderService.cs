@@ -70,6 +70,7 @@ namespace OrderManagementSystem.API.Services
             var order = new Order
             {
                 CustomerId = dto.CustomerId,
+                Customer = customer,
                 OrderDate = DateTime.UtcNow
             };
 
@@ -79,12 +80,27 @@ namespace OrderManagementSystem.API.Services
             {
                 var product = products.Single(p => p.Id == itemDto.ProductId);
 
+                // Stock availability check
+                if (product.StockQuantity < itemDto.Quantity)
+                {
+                    _logger.LogWarning(
+                        "Cannot create order: Insufficient stock for ProductId {ProductId}. Available: {AvailableStock}, Requested: {RequestedQuantity}.",
+                        product.Id,
+                        product.StockQuantity,
+                        itemDto.Quantity);
+                    throw new ArgumentException($"Insufficient stock for product '{product.Name}'. Available: {product.StockQuantity}, Requested: {itemDto.Quantity}");
+                }
+
+                // Decrement stock
+                product.StockQuantity -= itemDto.Quantity;
+
                 var unitPrice = product.Price;
                 var lineTotal = unitPrice * itemDto.Quantity;
 
                 var orderItem = new OrderItem
                 {
                     ProductId = product.Id,
+                    Product = product,
                     Quantity = itemDto.Quantity,
                     UnitPrice = unitPrice,
                     LineTotal = lineTotal
@@ -118,14 +134,6 @@ namespace OrderManagementSystem.API.Services
                     "Order {OrderId} created successfully for CustomerId {CustomerId}.",
                     order.Id,
                     dto.CustomerId);
-
-                // Load navigation properties for mapping (Customer + Items + Product)
-                await _dbContext.Entry(order).Reference(o => o.Customer).LoadAsync();
-                await _dbContext.Entry(order).Collection(o => o.Items).LoadAsync();
-                foreach (var item in order.Items)
-                {
-                    await _dbContext.Entry(item).Reference(i => i.Product).LoadAsync();
-                }
 
                 var dtoResult = MapToOrderDto(order);
 

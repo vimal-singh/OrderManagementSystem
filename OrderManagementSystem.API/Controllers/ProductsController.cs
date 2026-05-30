@@ -39,5 +39,36 @@ namespace OrderManagementSystem.API.Controllers
             var createdProduct = await _productService.CreateProductAsync(productDto);
             return CreatedAtAction(nameof(Get), new { id = createdProduct.Id }, createdProduct);
         }
+
+        [HttpPut("{id:int}")]
+        public async Task<IActionResult> UpdateProduct([FromRoute] int id, [FromBody] CreateProductDTO productDto)
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
+
+            try
+            {
+                var updatedProduct = await _productService.UpdateProductAsync(id, productDto);
+                return Ok(updatedProduct);
+            }
+            catch (InvalidOperationException)
+            {
+                return NotFound(new { message = $"Product with id {id} not found." });
+            }
+        }
+
+        [HttpDelete("{id:int}")]
+        public async Task<IActionResult> DeleteProduct([FromRoute] int id)
+        {
+            var success = await _productService.DeleteProductAsync(id);
+            if (!success)
+            {
+                return NotFound(new { message = $"Product with id {id} not found." });
+            }
+
+            return NoContent();
+        }
     }
 }

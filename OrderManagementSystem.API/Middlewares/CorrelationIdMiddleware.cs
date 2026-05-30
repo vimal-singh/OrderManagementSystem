@@ -24,18 +24,21 @@ namespace OrderManagementSystem.API.Middlewares
         // 2. The response header (for clients)
         public async Task InvokeAsync(HttpContext context, ILogger<CorrelationIdMiddleware> logger)
         {
-            // Generate a new correlation ID for each request
-            var correlationId = Guid.NewGuid().ToString().ToUpper();
+            // Check if the correlation ID is already present in request headers
+            if (!context.Request.Headers.TryGetValue(CorrelationIdHeader, out var correlationId) || string.IsNullOrWhiteSpace(correlationId))
+            {
+                correlationId = Guid.NewGuid().ToString().ToUpper();
+            }
 
             // Store in HttpContext for downstream code
-            context.Items[CorrelationIdHeader] = correlationId;
+            context.Items[CorrelationIdHeader] = correlationId.ToString();
 
             // Ensure the same correlation ID is returned to the client
             // in the response header
-            context.Response.Headers[CorrelationIdHeader] = correlationId;
+            context.Response.Headers[CorrelationIdHeader] = correlationId.ToString();
 
             // Push CorrelationId into Serilog's log context for the entire request
-            using (LogContext.PushProperty("CorrelationId", correlationId))
+            using (LogContext.PushProperty("CorrelationId", correlationId.ToString()))
             {
                 await _next(context);
             }

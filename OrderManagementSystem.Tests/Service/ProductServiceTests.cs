@@ -94,5 +94,77 @@ namespace OrderManagementSystem.Tests.Service
                 It.IsAny<DistributedCacheEntryOptions>(),
                 default), Times.Never);
         }
+
+        [Fact]
+        public async Task CreateProductAsync_ValidProduct_SavesToDbAndInvalidatesCache()
+        {
+            // Arrange
+            var createDto = new CreateProductDTO { Name = "New", Price = 10, StockQuantity = 5, Category = "Test" };
+            var product = new Product { Id = 1, Name = "New", Price = 10, StockQuantity = 5, Category = "Test", IsActive = true };
+
+            _repoMock.Setup(r => r.AddProductAsync(It.IsAny<Product>()))
+                .ReturnsAsync(product);
+
+            // Act
+            var result = await _service.CreateProductAsync(createDto);
+
+            // Assert
+            Assert.NotNull(result);
+            Assert.Equal("New", result.Name);
+            Assert.Equal(5, result.StockQuantity);
+
+            // Verify DB save
+            _repoMock.Verify(r => r.AddProductAsync(It.Is<Product>(p => p.Name == "New")), Times.Once);
+
+            // Verify cache invalidated
+            _cacheMock.Verify(c => c.RemoveAsync("all_products", default), Times.Once);
+        }
+
+        [Fact]
+        public async Task UpdateProductAsync_ExistingProduct_UpdatesDbAndInvalidatesCache()
+        {
+            // Arrange
+            var createDto = new CreateProductDTO { Name = "Updated", Price = 15, StockQuantity = 20, Category = "Test" };
+            var product = new Product { Id = 1, Name = "Updated", Price = 15, StockQuantity = 20, Category = "Test", IsActive = true };
+
+            _repoMock.Setup(r => r.UpdateProductAsync(It.IsAny<Product>()))
+                .ReturnsAsync(product);
+
+            // Act
+            var result = await _service.UpdateProductAsync(1, createDto);
+
+            // Assert
+            Assert.NotNull(result);
+            Assert.Equal("Updated", result.Name);
+            Assert.Equal(20, result.StockQuantity);
+
+            // Verify DB update
+            _repoMock.Verify(r => r.UpdateProductAsync(It.Is<Product>(p => p.Id == 1 && p.Name == "Updated")), Times.Once);
+
+            // Verify cache entries invalidated
+            _cacheMock.Verify(c => c.RemoveAsync("all_products", default), Times.Once);
+            _cacheMock.Verify(c => c.RemoveAsync("product_1", default), Times.Once);
+        }
+
+        [Fact]
+        public async Task DeleteProductAsync_ExistingProduct_RemovesFromDbAndInvalidatesCache()
+        {
+            // Arrange
+            _repoMock.Setup(r => r.DeleteProductAsync(1))
+                .ReturnsAsync(new Product { Id = 1, Name = "Deleted" });
+
+            // Act
+            var result = await _service.DeleteProductAsync(1);
+
+            // Assert
+            Assert.True(result);
+
+            // Verify DB delete
+            _repoMock.Verify(r => r.DeleteProductAsync(1), Times.Once);
+
+            // Verify cache entries invalidated
+            _cacheMock.Verify(c => c.RemoveAsync("all_products", default), Times.Once);
+            _cacheMock.Verify(c => c.RemoveAsync("product_1", default), Times.Once);
+        }
     }
 }

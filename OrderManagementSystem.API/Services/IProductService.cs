@@ -7,5 +7,7 @@ namespace OrderManagementSystem.API.Services
         Task<IEnumerable<ProductDTO>> GetProductsAsync();
         Task<ProductDTO?> GetProductByIdAsync(int id);
         Task<ProductDTO> CreateProductAsync(CreateProductDTO productDto);
+        Task<ProductDTO> UpdateProductAsync(int id, CreateProductDTO productDto);
+        Task<bool> DeleteProductAsync(int id);
     }
 }

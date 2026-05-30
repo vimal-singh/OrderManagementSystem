@@ -13,30 +13,6 @@ namespace OrderManagementSystem.API.Services
         private readonly IProductRepository _repository = repository;
         private readonly IDistributedCache _cache = cache;
 
-        public async Task<ProductDTO> CreateProductAsync(CreateProductDTO productDto)
-        {
-            var product = new Product
-            {
-                Name = productDto.Name,
-                Price = productDto.Price,
-                StockQuantity = productDto.StockQuantity,
-                Category = productDto.Category,
-
-            };
-            // invalidate cache for all products
-            await _cache.RemoveAsync("all_products");
-            
-            await _repository.AddProductAsync(product);
-
-            return new ProductDTO
-            {
-                Id = product.Id,
-                Name = product.Name,
-                Price = product.Price,
-                StockQuantity = product.StockQuantity,
-                Category = product.Category
-            };
-        }
 
         public async Task<ProductDTO?> GetProductByIdAsync(int id)
         {
@@ -69,7 +45,10 @@ namespace OrderManagementSystem.API.Services
             {
                 Id = dbProduct.Id,
                 Name = dbProduct.Name,
-                Price = dbProduct.Price
+                Price = dbProduct.Price,
+                StockQuantity = dbProduct.StockQuantity,
+                Category = dbProduct.Category,
+                IsActive = dbProduct.IsActive
             };
 
             // Store in cache (safe failure)
@@ -99,12 +78,19 @@ namespace OrderManagementSystem.API.Services
             var cacheKey = "all_products";
 
             // Try cache
-            var cachedProducts = await _cache.GetStringAsync(cacheKey);
-
-            if (!string.IsNullOrEmpty(cachedProducts))
+            try
             {
-                return JsonSerializer.Deserialize<List<ProductDTO>>(cachedProducts)
-                       ?? new List<ProductDTO>();
+                var cachedProducts = await _cache.GetStringAsync(cacheKey);
+
+                if (!string.IsNullOrEmpty(cachedProducts))
+                {
+                    return JsonSerializer.Deserialize<List<ProductDTO>>(cachedProducts)
+                           ?? new List<ProductDTO>();
+                }
+            }
+            catch
+            {
+                // Redis/cache failure → ignore and continue
             }
             
             var dbProducts = await _repository.GetAllProductsAsync();
@@ -112,21 +98,126 @@ namespace OrderManagementSystem.API.Services
             {
                 Id = p.Id,
                 Name = p.Name,
-                Price = p.Price
+                Price = p.Price,
+                StockQuantity = p.StockQuantity,
+                Category = p.Category,
+                IsActive = p.IsActive
             }).ToList();
             
             // Cache result (even if empty)
-            var cacheOptions = new DistributedCacheEntryOptions
+            try
             {
-                AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(10)
+                var cacheOptions = new DistributedCacheEntryOptions
+                {
+                    AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(10)
+                };
+
+                await _cache.SetStringAsync(
+                    cacheKey,
+                    JsonSerializer.Serialize(products),
+                    cacheOptions
+                );
+            }
+            catch
+            {
+                // Cache write failure → ignore
+            }
+            return products;
+        }
+
+        public async Task<ProductDTO> CreateProductAsync(CreateProductDTO productDto)
+        {
+            var product = new Product
+            {
+                Name = productDto.Name,
+                Price = productDto.Price,
+                StockQuantity = productDto.StockQuantity,
+                Category = productDto.Category,
+                IsActive = true
+            };
+            
+            await _repository.AddProductAsync(product);
+
+            // Invalidate cache for all products (safe failure)
+            try
+            {
+                await _cache.RemoveAsync("all_products");
+            }
+            catch
+            {
+                // Cache failure → ignore
+            }
+
+            return new ProductDTO
+            {
+                Id = product.Id,
+                Name = product.Name,
+                Price = product.Price,
+                StockQuantity = product.StockQuantity,
+                Category = product.Category,
+                IsActive = product.IsActive
+            };
+        }
+
+        public async Task<ProductDTO> UpdateProductAsync(int id, CreateProductDTO productDto)
+        {
+            var product = new Product
+            {
+                Id = id,
+                Name = productDto.Name,
+                Price = productDto.Price,
+                StockQuantity = productDto.StockQuantity,
+                Category = productDto.Category,
+                IsActive = true
             };
 
-            await _cache.SetStringAsync(
-                cacheKey,
-                JsonSerializer.Serialize(products),
-                cacheOptions
-            );
-            return products;
+            var updatedProduct = await _repository.UpdateProductAsync(product);
+
+            // Invalidate caches (safe failure)
+            try
+            {
+                await _cache.RemoveAsync("all_products");
+                await _cache.RemoveAsync($"product_{id}");
+            }
+            catch
+            {
+                // Cache failure → ignore
+            }
+
+            return new ProductDTO
+            {
+                Id = updatedProduct.Id,
+                Name = updatedProduct.Name,
+                Price = updatedProduct.Price,
+                StockQuantity = updatedProduct.StockQuantity,
+                Category = updatedProduct.Category,
+                IsActive = updatedProduct.IsActive
+            };
+        }
+
+        public async Task<bool> DeleteProductAsync(int id)
+        {
+            try
+            {
+                await _repository.DeleteProductAsync(id);
+
+                // Invalidate caches (safe failure)
+                try
+                {
+                    await _cache.RemoveAsync("all_products");
+                    await _cache.RemoveAsync($"product_{id}");
+                }
+                catch
+                {
+                    // Cache failure → ignore
+                }
+
+                return true;
+            }
+            catch (InvalidOperationException)
+            {
+                return false;
+            }
         }
     }
 }
