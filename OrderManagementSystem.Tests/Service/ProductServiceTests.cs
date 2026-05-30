@@ -166,5 +166,67 @@ namespace OrderManagementSystem.Tests.Service
             _cacheMock.Verify(c => c.RemoveAsync("all_products", default), Times.Once);
             _cacheMock.Verify(c => c.RemoveAsync("product_1", default), Times.Once);
         }
+
+        [Fact]
+        public async Task GetProductsAsync_MultipleConcurrentRequests_OnlyQueriesDatabaseOnce()
+        {
+            // Arrange
+            byte[]? cachedData = null;
+
+            // Setup cache mock to read/write to cachedData variable
+            _cacheMock.Setup(c => c.GetAsync("all_products", It.IsAny<CancellationToken>()))
+                .ReturnsAsync((string key, CancellationToken ct) => cachedData);
+
+            _cacheMock.Setup(c => c.SetAsync(
+                "all_products", 
+                It.IsAny<byte[]>(), 
+                It.IsAny<DistributedCacheEntryOptions>(), 
+                It.IsAny<CancellationToken>()))
+                .Callback<string, byte[], DistributedCacheEntryOptions, CancellationToken>((key, value, options, ct) =>
+                {
+                    cachedData = value;
+                })
+                .Returns(Task.CompletedTask);
+
+            var dbProducts = new List<Product>
+            {
+                new Product { Id = 1, Name = "Laptop", Price = 1000, StockQuantity = 10, Category = "Electronics", IsActive = true }
+            };
+
+            // Setup DB call with simulated latency to enforce concurrency overlapping
+            _repoMock.Setup(r => r.GetAllProductsAsync())
+                .Returns(async () =>
+                {
+                    await Task.Delay(100);
+                    return dbProducts;
+                });
+
+            // Act: Fire 10 concurrent requests at the same time
+            var tasks = new List<Task<IEnumerable<ProductDTO>>>();
+            for (int i = 0; i < 10; i++)
+            {
+                tasks.Add(_service.GetProductsAsync());
+            }
+
+            var results = await Task.WhenAll(tasks);
+
+            // Assert
+            Assert.Equal(10, results.Length);
+            foreach (var result in results)
+            {
+                Assert.Single(result);
+                Assert.Equal("Laptop", result.First().Name);
+            }
+
+            // Verify database was called EXACTLY ONCE
+            _repoMock.Verify(r => r.GetAllProductsAsync(), Times.Once);
+
+            // Verify cache was written to EXACTLY ONCE
+            _cacheMock.Verify(c => c.SetAsync(
+                "all_products",
+                It.IsAny<byte[]>(),
+                It.IsAny<DistributedCacheEntryOptions>(),
+                It.IsAny<CancellationToken>()), Times.Once);
+        }
     }
 }

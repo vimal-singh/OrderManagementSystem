@@ -41,6 +41,7 @@ builder.Services.AddScoped<IOrderService, OrderService>();
 builder.Services.AddScoped<IProductService, ProductService>();
 builder.Services.AddScoped<IProductRepository, ProductRepository>();
 builder.Services.AddScoped<ICorrelationIdAccessor, CorrelationIdAccessor>();
+builder.Services.AddHostedService<ProductCacheRefresherWorker>();
 
 builder.Services.AddStackExchangeRedisCache(options =>
 {

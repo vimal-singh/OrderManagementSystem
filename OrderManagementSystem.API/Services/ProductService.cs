@@ -5,6 +5,8 @@ using OrderManagementSystem.API.Data;
 using OrderManagementSystem.API.DTOs;
 using OrderManagementSystem.API.Entities;
 using OrderManagementSystem.API.Repositories;
+using System.Collections.Concurrent;
+using System.Threading;
 
 namespace OrderManagementSystem.API.Services
 {
@@ -13,12 +15,15 @@ namespace OrderManagementSystem.API.Services
         private readonly IProductRepository _repository = repository;
         private readonly IDistributedCache _cache = cache;
 
+        // Semaphores to mitigate cache stampedes (Single Flight / Lock Contention)
+        private static readonly SemaphoreSlim _allProductsSemaphore = new(1, 1);
+        private static readonly ConcurrentDictionary<int, SemaphoreSlim> _productSemaphores = new();
 
         public async Task<ProductDTO?> GetProductByIdAsync(int id)
         {
             var cacheKey = $"product_{id}";
 
-            // Try cache (safe failure)
+            // 1. Try cache (fast path)
             try
             {
                 var cachedProduct = await _cache.GetStringAsync(cacheKey);
@@ -33,51 +38,77 @@ namespace OrderManagementSystem.API.Services
                 // Redis/cache failure → ignore and continue
             }
 
-            // Fetch from DB
-            var dbProduct = await _repository.GetByIdAsync(id);
+            // 2. Lock on the product key
+            var semaphore = _productSemaphores.GetOrAdd(id, _ => new SemaphoreSlim(1, 1));
+            await semaphore.WaitAsync();
 
-            if (dbProduct == null)
-            {
-                return null;
-            }
-
-            var product = new ProductDTO
-            {
-                Id = dbProduct.Id,
-                Name = dbProduct.Name,
-                Price = dbProduct.Price,
-                StockQuantity = dbProduct.StockQuantity,
-                Category = dbProduct.Category,
-                IsActive = dbProduct.IsActive
-            };
-
-            // Store in cache (safe failure)
             try
             {
-                var cacheOptions = new DistributedCacheEntryOptions
+                // 3. Double-check cache inside the lock
+                try
                 {
-                    AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(10)
+                    var cachedProduct = await _cache.GetStringAsync(cacheKey);
+
+                    if (!string.IsNullOrEmpty(cachedProduct))
+                    {
+                        return JsonSerializer.Deserialize<ProductDTO>(cachedProduct);
+                    }
+                }
+                catch
+                {
+                    // Redis/cache failure → ignore
+                }
+
+                // 4. Fetch from DB
+                var dbProduct = await _repository.GetByIdAsync(id);
+
+                if (dbProduct == null)
+                {
+                    return null;
+                }
+
+                var product = new ProductDTO
+                {
+                    Id = dbProduct.Id,
+                    Name = dbProduct.Name,
+                    Price = dbProduct.Price,
+                    StockQuantity = dbProduct.StockQuantity,
+                    Category = dbProduct.Category,
+                    IsActive = dbProduct.IsActive
                 };
 
-                await _cache.SetStringAsync(
-                    cacheKey,
-                    JsonSerializer.Serialize(product),
-                    cacheOptions
-                );
-            }
-            catch
-            {
-                // Cache write failure → ignore
-            }
+                // 5. Store in cache (safe failure)
+                try
+                {
+                    var cacheOptions = new DistributedCacheEntryOptions
+                    {
+                        AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(10)
+                    };
 
-            return product;
+                    await _cache.SetStringAsync(
+                        cacheKey,
+                        JsonSerializer.Serialize(product),
+                        cacheOptions
+                    );
+                }
+                catch
+                {
+                    // Cache write failure → ignore
+                }
+
+                return product;
+            }
+            finally
+            {
+                semaphore.Release();
+            }
         }
 
         public async Task<IEnumerable<ProductDTO>> GetProductsAsync()
         {
             var cacheKey = "all_products";
 
-            // Try cache
+            // 1. Try cache (fast path)
             try
             {
                 var cachedProducts = await _cache.GetStringAsync(cacheKey);
@@ -93,36 +124,63 @@ namespace OrderManagementSystem.API.Services
                 // Redis/cache failure → ignore and continue
             }
             
-            var dbProducts = await _repository.GetAllProductsAsync();
-            var products = dbProducts.Select(p => new ProductDTO
-            {
-                Id = p.Id,
-                Name = p.Name,
-                Price = p.Price,
-                StockQuantity = p.StockQuantity,
-                Category = p.Category,
-                IsActive = p.IsActive
-            }).ToList();
-            
-            // Cache result (even if empty)
+            // 2. Lock on all_products semaphore
+            await _allProductsSemaphore.WaitAsync();
+
             try
             {
-                var cacheOptions = new DistributedCacheEntryOptions
+                // 3. Double-check cache inside the lock
+                try
                 {
-                    AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(10)
-                };
+                    var cachedProducts = await _cache.GetStringAsync(cacheKey);
 
-                await _cache.SetStringAsync(
-                    cacheKey,
-                    JsonSerializer.Serialize(products),
-                    cacheOptions
-                );
+                    if (!string.IsNullOrEmpty(cachedProducts))
+                    {
+                        return JsonSerializer.Deserialize<List<ProductDTO>>(cachedProducts)
+                               ?? new List<ProductDTO>();
+                    }
+                }
+                catch
+                {
+                    // Redis/cache failure → ignore
+                }
+
+                // 4. Fetch from DB
+                var dbProducts = await _repository.GetAllProductsAsync();
+                var products = dbProducts.Select(p => new ProductDTO
+                {
+                    Id = p.Id,
+                    Name = p.Name,
+                    Price = p.Price,
+                    StockQuantity = p.StockQuantity,
+                    Category = p.Category,
+                    IsActive = p.IsActive
+                }).ToList();
+                
+                // 5. Store in cache (safe failure)
+                try
+                {
+                    var cacheOptions = new DistributedCacheEntryOptions
+                    {
+                        AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(10)
+                    };
+
+                    await _cache.SetStringAsync(
+                        cacheKey,
+                        JsonSerializer.Serialize(products),
+                        cacheOptions
+                    );
+                }
+                catch
+                {
+                    // Cache write failure → ignore
+                }
+                return products;
             }
-            catch
+            finally
             {
-                // Cache write failure → ignore
+                _allProductsSemaphore.Release();
             }
-            return products;
         }
 
         public async Task<ProductDTO> CreateProductAsync(CreateProductDTO productDto)
