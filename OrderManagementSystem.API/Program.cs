@@ -4,6 +4,7 @@ using OrderManagementSystem.API.Data;
 using Serilog;
 using OrderManagementSystem.API.Middlewares;
 using OrderManagementSystem.API.Repositories;
+using OrderManagementSystem.API.Observers;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -42,6 +43,13 @@ builder.Services.AddScoped<IProductService, ProductService>();
 builder.Services.AddScoped<IProductRepository, ProductRepository>();
 builder.Services.AddScoped<ICorrelationIdAccessor, CorrelationIdAccessor>();
 builder.Services.AddHostedService<ProductCacheRefresherWorker>();
+
+// Register Kafka-based Observer Pattern notifications
+builder.Services.AddSingleton<IOrderEventProducer, KafkaOrderEventProducer>();
+builder.Services.AddScoped<IOrderObserver, EmailNotificationObserver>();
+builder.Services.AddScoped<IOrderObserver, SmsNotificationObserver>();
+builder.Services.AddScoped<IOrderObserver, PushNotificationObserver>();
+builder.Services.AddHostedService<KafkaOrderEventConsumer>();
 
 builder.Services.AddStackExchangeRedisCache(options =>
 {

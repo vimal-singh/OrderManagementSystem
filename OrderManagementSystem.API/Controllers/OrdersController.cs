@@ -2,7 +2,6 @@ using Microsoft.AspNetCore.Mvc;
 using OrderManagementSystem.API.DTOs;
 using OrderManagementSystem.API.Services;
 using System.Diagnostics;
-using System.Text.Json;
 
 namespace OrderManagementSystem.API.Controllers
 {

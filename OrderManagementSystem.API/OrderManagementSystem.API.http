@@ -1,6 +1,28 @@
 @OrderManagementSystem.API_HostAddress = http://localhost:5193
 
-GET {{OrderManagementSystem.API_HostAddress}}/weatherforecast/
+### Get order by ID (e.g. ID = 1)
+GET {{OrderManagementSystem.API_HostAddress}}/api/orders/1
 Accept: application/json
 
 ###
+
+### Create a new order (Customer ID 1, Laptop Product ID 1)
+POST {{OrderManagementSystem.API_HostAddress}}/api/orders
+Content-Type: application/json
+Accept: application/json
+
+{
+  "customerId": 1,
+  "items": [
+    {
+      "productId": 1,
+      "quantity": 1
+    }
+  ]
+}
+
+###
+
+### Get all orders for Customer 1
+GET {{OrderManagementSystem.API_HostAddress}}/api/orders/customer/1
+Accept: application/json

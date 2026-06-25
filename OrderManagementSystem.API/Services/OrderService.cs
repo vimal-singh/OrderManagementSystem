@@ -2,19 +2,23 @@ using Microsoft.EntityFrameworkCore;
 using OrderManagementSystem.API.Data;
 using OrderManagementSystem.API.DTOs;
 using OrderManagementSystem.API.Entities;
+using OrderManagementSystem.API.Observers;
 
 namespace OrderManagementSystem.API.Services
 {
     public class OrderService : IOrderService
     {
         private readonly OrderManagementDbContext _dbContext;
+        private readonly IOrderEventProducer _eventProducer;
         private readonly ILogger<OrderService> _logger;
 
         public OrderService(
             OrderManagementDbContext dbContext,
+            IOrderEventProducer eventProducer,
             ILogger<OrderService> logger)
         {
             _dbContext = dbContext;
+            _eventProducer = eventProducer;
             _logger = logger;
         }
 
@@ -136,6 +140,28 @@ namespace OrderManagementSystem.API.Services
                     dto.CustomerId);
 
                 var dtoResult = MapToOrderDto(order);
+
+                // Publish event to Kafka
+                try
+                {
+                    var orderCreatedEvent = new OrderCreatedEvent
+                    {
+                        OrderId = order.Id,
+                        CustomerId = order.CustomerId,
+                        CustomerName = customer.FullName,
+                        TotalAmount = order.TotalAmount,
+                        OrderDate = order.OrderDate,
+                        ItemCount = order.Items.Count
+                    };
+                    await _eventProducer.PublishOrderCreatedAsync(orderCreatedEvent);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(
+                        ex,
+                        "Failed to publish OrderCreatedEvent for OrderId {OrderId}.",
+                        order.Id);
+                }
 
                 // Log the resulting DTO as structured data
                 _logger.LogInformation(
